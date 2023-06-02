@@ -1,0 +1,22 @@
+1. ACPYPE server
+Use: topology and FF for a ligand using antchamber at backend, output is compatible with major MD software
+     both online as well as offline version exist
+https://www.bio2byte.be/acpype
+username: ashwani
+password: proline21
+
+2. Automated Topology Builder (ATB) and Repository
+Use: topology and FF for a ligand
+https://atb.uq.edu.au/
+username: ashwani@rrcat.gov.in
+password: proline21
+
+
+3. CHARMM_GUI
+use:  To makebuild complex systems and prepare their inputs with well-established and reproducible simulation protocols for state-of-the-art molecular simulations using widely used simulation packages such as CHARMM, NAMD, GROMACS, AMBER, GENESIS, Tinker, LAMMPS, Desmond, and OpenMM.
+
+https://www.charmm-gui.org/
+
+username: ashwani@rrcat.gov.in
+password: proline21
+

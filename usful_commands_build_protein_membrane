@@ -1,0 +1,6 @@
+
+# Command to cut column cleanly
+cut -c 1-75 sstr1_ak.pdb > sstr1_ak_1.pdb
+
+# Job id 5363216144
+

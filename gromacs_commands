@@ -1,0 +1,203 @@
+############# Some good online source for MD #########
+https://www3.mpibpc.mpg.de/groups/de_groot/compbio1/
+https://www3.mpibpc.mpg.de/groups/de_groot/compbio/index.html
+http://www.mdtutorials.com/gmx/
+http://biophysics.med.jhmi.edu/~yliu120/tutorials.html
+https://www.blopig.com/blog/2018/12/turning-md-trajectories-into-movies-using-pymol/
+https://www.mpibpc.mpg.de/266088/gmx_analysis
+http://nmr.chem.uu.nl/~adrien/course/molmod/analysis1.html
+http://compbio.biosci.uq.edu.au/education/mdcourse/Analysis.html
+################################################################################
+
+echo "Excellent site for data analysis in gromacs"
+echo "http://md.chem.rug.nl/~mdcourse/molmod2012/analysis.html"
+
+##############################################################
+
+####Working gromacs command with 2019_3 version:################
+
+############################################################
+
+
+# running mpi version of gromacs for multi simulations
+mpirun -np 2 gmx_mpi mdrun -s benchMEM.tpr -nsteps 10000 -resethway -pme gpu -multidir a/ b/
+
+mpirun -np 4 gmx_mpi mdrun -s benchMEM.tpr -nsteps 20000 -resethway -pme gpu -ntomp 8 -multidir {a..d}
+
+# mpi run with ntomp and pin defined
+mpirun -np 2 gmx_mpi mdrun -s benchMEM.tpr -nsteps 20000 -resethway -pme gpu -ntomp 8 -pin on -multidir a/ b/
+
+# equivalent to normal run without mpi, but alone gmx is not availible as gromacs compiles with mpi
+gmx_mpi mdrun -s benchMEM.tpr -nsteps 20000 -resethway -pme gpu
+
+
+############################################################
+# working commands with mpi version
+# np will define the number of main rank and it should be minimum the number of 
+# parallel temperature run
+# -ntmpi will not work with mdrun_mpi, it will work with non mpi version
+# -ntomp will define the number of openMP thread for each rank(main mpi thread)
+# hence total number of thread "np*ntomp" for mdrun_mpi version
+# Equivalent in gmx mdrun will be "ntmpi*ntomp" threads
+
+mpirun -np 4 mdrun_mpi -v -multidir equil[0123] -nsteps 10000 -gpu_id 0  -ntomp 4 -pin on -pinoffset 0 -pinstride 1
+
+############################################################
+
+
+############################################################
+# command for production md run 
+  gmx grompp -f md.mdp -c npt_1aki.gro -r npt_1aki.gro -t npt_1aki.cpt -p topol.top -o md_01_1aki.tpr && gmx mdrun -v -deffnm md_01_1aki
+
+############################################################
+
+# pin ON, and thread pinning behaviour with -pinstride 1 and -pinstride 2
+Note that the above topology mapping simply means that the indexed
+entities that the operating system calls "CPU" grouped in "[]"
+correspond to hardware threads of the same core, i.e. core 0 is [0
+32], core 1 [1 33], etc. 
+Pinning with a stride happens into this map:
+- with a -pinstride 1 thread mapping will be (app thread->hardware thread): 0->0, 1->32, 2->1, 3->33,...
+- with a -pinstride 2 thread mapping will be (-||-): 0->0, 1->1, 2->2, 3->3, ...
+
+
+gmx mdrun -v -deffnm md_01_$mod_pdb -gpu_id 1 -ntmpi 1 -ntomp 12 -pin on -pinoffset 16 -pinstride 1
+gmx mdrun -v -deffnm md_01_$mod_pdb -gpu_id 0 -ntmpi 1 -ntomp 12 -pin on -pinoffset 0 -pinstride 1
+
+
+####################################
+###  Some gromacs commands from internet  ######
+##################################
+
+1D5R
+
+GENERATE TOPOLOGY
+pdb2gmx -f 1D5R.pdb -o 1D5R_processed.gro -water spce
+
+DEFINE BOX DIMENSION & ADD SOLVATE
+editconf -f 1D5R_processed.gro -o 1D5R_newbox.gro -c -d 1.0 -bt cubic
+genbox -cp 1D5R_newbox.gro -cs spc216.gro -o 1D5R_solv.gro -p topol.top
+
+ADD IONS
+DOWNLOAD .MDP FILE
+grompp -f ions.mdp -c 1D5R_solv.gro -p topol.top -o ions.tpr
+genion -s ions.tpr -o 1D5R_solv_ions.gro -p topol.top -pname NA -nname CL -nn 12
+CHOOSE 13 FOR EMBEDDED IONS
+
+ENERGY MINIMIZATION
+DOWNLAOD .MDP FILE
+grompp -f minim.mdp -c 1D5R_solv_ions.gro -p topol.top -o em.tpr
+mdrun -v -deffnm em
+g_energy -f em.edr -o potential.xvg
+PRESS 10 FOR POTENTIAL
+Xmgrace potential.xvg
+
+EQULIBRATION
+PHASE 1
+DOWNLAOD .MDP FILE
+grompp -f nvt.mdp -c em.gro -p topol.top -o nvt.tpr
+mdrun -v deffnm nvt
+g_energy -f nvt.edr -o temperature.xvg
+TYPE 15 TO SELECT TEMPERATURE
+Xmgrace temperature.xvg
+
+PHASE 2
+DOWNLOAD .MDP
+grompp -f npt.mdp -c nvt.gro -t nvt.cpt -p topol.top -o npt.tpr
+mdrun -v deffnm npt
+g_energy -f npt.edr -o pressure.xvg
+TYPE 16 TO SELECT PRESSURE
+g_energy -f npt.edr -o density.xvg
+Xmgrace density.xvg
+
+PRODUCTION MD
+DOWNLOAD .MDP FILE
+grompp -f md.mdp -c npt.gro -t npt.cpt -p topol.top -o md_0_1.tpr
+mdrun -v deffnm md_0_1
+
+######ANALYSIS#########
+trjconv -s md_0_1.tpr -f md_0_1.xtc -o md_0_1_noPBC.xtc -pbc mol -ur compact
+press 0 for corrected trajectory
+
+g_rms -s md_0_1.tpr -f md_0_1_noPBC.xtc -o rmsd.xvg -tu ns
+select 4 for both least square & rmsd
+
+g_gyrate -s md_0_1.tpr -f md_0_1_noPBC.xtc -o gyrate.xvg  
+g_rmsf -s md_0_1.tpr -f md_0_1_noPBC.xtc -o rmsf.xvg -res
+
+g_sas -f md_0_1_noPBC.xtc -s md_0_1.tpr -o sas2.xvg -oa atomic2-sas.xvg -or residue2-sas.xvg 
+g_hbond -f md_0_1_noPBC.xtc -s md_0_1.tpr -num hydrogen2-bond-intra-protein.xvg
+g_hbond -f md_0_1_noPBC.xtc -s md_0_1.tpr -num hydrogen2-bond-protein-water.xvg
+
+###Local Analysis####
+1) 1D5R91-131
+make_ndx -f md_0_1.tpr -o 1D5R91-131Local.ndx
+g_rms -s md_0_1.tpr -f md_0_1_noPBC.xtc -n 1D5R91-131Local.ndx -o 1D5R91-131Rrmsd.xvg -tu ns
+g_gyrate -s md_0_1.tpr -f md_0_1_noPBC.xtc -n 1D5R91-131Local.ndx -o 1D5R91-131gyrate.xvg 
+g_rmsf -s md_0_1.tpr -f md_0_1_noPBC.xtc -n 1D5R91-131Local.ndx -o 1D5R91-131rmsf.xvg -res
+g_sas -f md_0_1_noPBC.xtc -s md_0_1.tpr -n 1D5R91-131Local.ndx -o 1D5R91-131sas.xvg -oa 1D5R91-131atomic-sas.xvg -or 1D5R91-131residue-sas.xvg 
+g_hbond -f md_0_1_noPBC.xtc -s md_0_1.tpr -n 1D5R91-131Local.ndx -num 1D5R91-131hydrogen1-bond-intra-protein.xvg
+
+2)1D5R104-144
+g_rms -s md_0_1.tpr -f md_0_1_noPBC.xtc -n 1D5R104-144Local.ndx -o 1D5R104-144rmsd.xvg -tu ns
+g_gyrate -s md_0_1.tpr -f md_0_1_noPBC.xtc -n 1D5R104-144Local.ndx -o 1D5R104-144gyrate.xvg 
+g_rmsf -s md_0_1.tpr -f md_0_1_noPBC.xtc -n 1D5R104-144Local.ndx -o 1D5R104-144rmsf.xvg -res
+g_sas -f md_0_1_noPBC.xtc -s md_0_1.tpr -n 1D5R104-144Local.ndx -o 1D5R104-144sas.xvg -oa 11D5R104-144atomic-sas.xvg -or 1D5R104-144residue-sas.xvg 
+g_hbond -f md_0_1_noPBC.xtc -s md_0_1.tpr -n 1D5R104-144Local.ndx -num 1D5R104-144hydrogen1-bond-intra-protein.xvg
+
+3)1D5R107-147
+make_ndx -f md_0_1.tpr -o 1D5R107-147Local.ndx
+g_rms -s md_0_1.tpr -f md_0_1_noPBC.xtc -n 1D5R107-147Local.ndx -o 1D5R107-147rmsd.xvg -tu ns
+g_gyrate -s md_0_1.tpr -f md_0_1_noPBC.xtc -n 1D5R107-147Local.ndx -o 1D5R107-147gyrate.xvg 
+g_rmsf -s md_0_1.tpr -f md_0_1_noPBC.xtc -n 1D5R107-147Local.ndx -o 11D5R107-147rmsf.xvg -res
+g_sas -f md_0_1_noPBC.xtc -s md_0_1.tpr -n 1D5R107-147Local.ndx -o 1D5R107-147sas.xvg -oa 1D5R107-147atomic-sas.xvg -or 1D5R107-147residue-sas.xvg 
+g_hbond -f md_0_1_noPBC.xtc -s md_0_1.tpr -n 1D5R107-147Local.ndx -num 1D5R107-147hydrogen1-bond-intra-protein.xvg
+
+####PCA Analysis###
+g_covar -f md_0_1_noPBC.xtc -s md_0_1.tpr -o eigenval.xvg  -v eigenvec.trr -av average.pdb -xpm covar.xpm -xpma covara.xpm
+g_anaeig -s ref.pdb -f md1_backbone.xtc  -v eigenvec.trr -extr extreme1.pdb -first 1 -last 1 -nframes 30
+g_anaeig -s ref.pdb -f md1_backbone.xtc -2d -first 1 -last 2
+
+g_anaeig -s md_0_1.tpr -f md_0_1_noPBC.xtc -v eigenvec.trr -eig eigenval.xvg -proj proj.xvg  -2d 2dproj.xvg -extr extreme1.pdb -first 1 -last 2 -nframes 30
+
+g_covar -f md_I738V.xtc -s md_I738V.tpr -av average.pdb -o eigenval.xvg -l covar.log 
+
+
+######################################################
+######## Insutructions for lig-protein simulation   ######
+##########################################################
+
+1) convert ligand pdb file to mol2 file using oenBABEL
+2) change the name of file to ligand.mol2
+3) log on  swissparam upload ligans.mol2 ....download ligand.zip. 
+4) copy   ligand.pdb
+		  ligand.itp
+5)	Remove any ligand atoms from receptor protein
+
+6)
+/home/ngadewal/gromacs/gromacs-4.5.5-bin/bin/./pdb2gmx_d -f protein.pdb -ff charmm27 -water tip3p -ignh -o conf.pdb -nochargegrp
+
+7) 
+Modify the topol.top file generated by pdb2gmx. In the "Include chain topologies" section, add the following statement, before all other lines referring to the protein or ions :
+  
+; Include chain topologies
+#include "ligand.itp"
+  
+(add above moleculetype] section.) 
+
+8) Insert the ATOM lines from the ligand.pdb into the conf.pdb file, right after the line for the ion CAL. Atoms will be automatically renumbered in the next step.
+
+9)
+/home/ngadewal/gromacs/gromacs-4.5.5-bin/bin/./editconf_d -f conf.pdb -o boxed.pdb -c -d 1.2 -bt octahedron
+/home/ngadewal/gromacs/gromacs-4.5.5-bin/bin/./genbox_d -cs -cp boxed.pdb -o solvated.pdb -p topol.top
+/home/ngadewal/gromacs/gromacs-4.5.5-bin/bin/./grompp_d -f em.mdp -c solvated.pdb -p topol.top -o ions.tpr
+/home/ngadewal/gromacs/gromacs-4.5.5-bin/bin/./genion_d -s ions.tpr -o em.pdb -p topol.top -pname NA -nname CL -nn 2
+/home/ngadewal/gromacs/gromacs-4.5.5-bin/bin/./grompp_d -f em.mdp -c em.pdb -p topol.top -o em.tpr
+/home/ngadewal/gromacs/gromacs-4.5.5-bin/bin/./mdrun_d -v -deffnm em
+#/home/ngadewal/gromacs/gromacs-4.5.5-bin/bin/./grompp_d -f nvt.mdp -c em.gro -p topol.top -o pr.tpr
+#mpirun -np 16 -machinefile $PBS_NODEFILE mdrun_d -v -deffnm pr
+#/home/ngadewal/gromacs/gromacs-4.5.5-bin/bin/./grompp_d -f npt.mdp -c pr.gro -p topol.top -o pr2.tpr
+#mpirun -np 16 -machinefile $PBS_NODEFILE mdrun_d -v -deffnm pr2
+#/home/ngadewal/gromacs/gromacs-4.5.5-bin/bin/./grompp_d -f md.mdp -c pr2.gro -p topol.top -o md.tpr
+#mpirun -np 16 -machinefile $PBS_NODEFILE mdrun_d -v -deffnm md
+
